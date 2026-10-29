@@ -20,3 +20,7 @@ The Ebonhold `ProjectEbonhold` addon must be installed and enabled. EbonTransmog
 3. Enable both `ProjectEbonhold` and `EbonTransmogCheck` on the character selection screen.
 
 The status describes whether the appearance is collected. The server may still add a particular item source even when another item with the same appearance is already collected.
+
+## Acknowledgements
+
+Thanks to Yosheema, who came up with the original idea for this addon.
