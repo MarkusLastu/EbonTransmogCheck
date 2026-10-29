@@ -1,0 +1,8 @@
+## Interface: 30300
+## Dependencies: ProjectEbonhold
+## Title: EbonTransmogCheck
+## Notes: Shows whether a loot-roll appearance is already collected
+## Author: Markus L
+## Version: 1.0
+## SavedVariables: EbonTransmogCheckDB, EbonholdTransmogCheckDB
+EbonTransmogCheck.lua
