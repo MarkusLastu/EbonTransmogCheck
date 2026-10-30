@@ -153,9 +153,9 @@ updateLanguageButtons()
 InterfaceOptions_AddCategory(optionsPanel)
 
 local collectionDataReady = false
-local activeRollItemLink
 local previewActive = false
 local previewedItemLink
+local previewedTooltip
 
 local function getAppearanceOwned(itemID)
     local collections = _G.ezCollections
@@ -240,22 +240,56 @@ local function closePreview()
     end
     previewActive = false
     previewedItemLink = nil
+    previewedTooltip = nil
 end
 
-local function updateHeldPreview()
-    if not activeRollItemLink or not IsControlKeyDown()
+local function updateHeldPreview(tooltip)
+    local itemLink = tooltip.ebonTransmogItemLink
+    if not tooltip:IsShown() or not itemLink or not IsControlKeyDown()
         or not DressUpItemLink or not DressUpFrame then
-        closePreview()
+        if previewedTooltip == tooltip then closePreview() end
         return
     end
 
-    if previewedItemLink ~= activeRollItemLink then
-        DressUpItemLink(activeRollItemLink)
+    if previewedItemLink ~= itemLink or previewedTooltip ~= tooltip then
+        DressUpItemLink(itemLink)
         DressUpFrame:ClearAllPoints()
         DressUpFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         previewActive = true
-        previewedItemLink = activeRollItemLink
+        previewedItemLink = itemLink
+        previewedTooltip = tooltip
     end
+end
+
+local function updateTooltipItem(tooltip, itemLink)
+    local itemID = itemLink and tonumber(string.match(itemLink, "item:(%d+)"))
+    tooltip.ebonTransmogItemLink = itemID and itemLink or nil
+    if not itemID or tooltip.ebonTransmogStatusItemID == itemID then return end
+
+    tooltip.ebonTransmogStatusItemID = itemID
+    addAppearanceStatus(tooltip, itemID)
+end
+
+local function hookTooltip(tooltip, readItems)
+    if not tooltip or tooltip.ebonTransmogCheckHooks then return end
+    tooltip.ebonTransmogCheckHooks = true
+
+    if readItems then
+        tooltip:HookScript("OnTooltipSetItem", function(self)
+            local _, itemLink = self:GetItem()
+            updateTooltipItem(self, itemLink)
+        end)
+    end
+    tooltip:HookScript("OnUpdate", updateHeldPreview)
+    tooltip:HookScript("OnHide", function(self)
+        self.ebonTransmogItemLink = nil
+        self.ebonTransmogStatusItemID = nil
+        if previewedTooltip == self then closePreview() end
+    end)
+    hooksecurefunc(tooltip, "ClearLines", function(self)
+        self.ebonTransmogItemLink = nil
+        self.ebonTransmogStatusItemID = nil
+    end)
 end
 
 -- ProjectEbonhold sends the initial collection snapshot after login.
@@ -274,35 +308,40 @@ collectionFrame:SetScript("OnEvent", function(self, event)
 end)
 
 -- ============================================================
--- Loot tooltip status and Ctrl-held dressing-room preview.
+-- Tooltip status and Ctrl-held dressing-room preview.
 -- ============================================================
+hookTooltip(GameTooltip, false)
+hookTooltip(ItemRefTooltip, true)
+hookTooltip(_G.AtlasLootTooltip, true)
+
 hooksecurefunc(GameTooltip, "SetLootRollItem", function(self, id)
-    local link = GetLootRollItemLink(id)
-    activeRollItemLink = link
-    addAppearanceStatus(self, getLootItemID(id))
+    updateTooltipItem(self, GetLootRollItemLink(id))
 end)
 
-GameTooltip:HookScript("OnTooltipSetItem", function()
-    local _, itemLink = GameTooltip:GetItem()
-    local tooltipItemID = itemLink and tonumber(string.match(itemLink, "item:(%d+)"))
-    local rollItemID = activeRollItemLink and tonumber(string.match(activeRollItemLink, "item:(%d+)"))
-    if tooltipItemID ~= rollItemID then
-        activeRollItemLink = nil
+local atlasLootHooked = false
+
+local function hookAtlasLootTooltips()
+    hookTooltip(_G.AtlasLootTooltip, true)
+    if type(AtlasLootItem_OnEnter) == "function" and not atlasLootHooked then
+        atlasLootHooked = true
+        hooksecurefunc("AtlasLootItem_OnEnter", function()
+            local _, itemLink = GameTooltip:GetItem()
+            updateTooltipItem(GameTooltip, itemLink)
+        end)
     end
+end
+
+local tooltipHookFrame = CreateFrame("Frame")
+tooltipHookFrame:RegisterEvent("ADDON_LOADED")
+tooltipHookFrame:SetScript("OnEvent", function()
+    hookAtlasLootTooltips()
 end)
-GameTooltip:HookScript("OnUpdate", updateHeldPreview)
-GameTooltip:HookScript("OnHide", function()
-    if not IsControlKeyDown() then
-        activeRollItemLink = nil
-        closePreview()
-    end
-end)
+hookAtlasLootTooltips()
 
 local ctrlKeyFrame = CreateFrame("Frame")
 ctrlKeyFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
 ctrlKeyFrame:SetScript("OnEvent", function(_, _, key, state)
     if (key == "LCTRL" or key == "RCTRL") and state == "0" then
-        activeRollItemLink = nil
         closePreview()
     end
 end)
