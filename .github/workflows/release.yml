@@ -1,0 +1,33 @@
+name: Publish release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifest and build addon ZIP
+        id: package
+        shell: pwsh
+        run: ./scripts/package.ps1
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v${{ steps.package.outputs.version }}
+          name: EbonTransmogCheck v${{ steps.package.outputs.version }}
+          body: |
+            EbonTransmogCheck v${{ steps.package.outputs.version }} for World of Warcraft 3.3.5a on Ebonhold.
+
+            Download and extract `EbonTransmogCheck.zip` into `Interface/AddOns`.
+          files: dist/EbonTransmogCheck.zip
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          make_latest: true

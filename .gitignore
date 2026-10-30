@@ -2,3 +2,4 @@
 ProjectEbonhold/
 *.bak
 *.tmp
+dist/

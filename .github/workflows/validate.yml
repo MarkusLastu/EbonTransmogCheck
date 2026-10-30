@@ -1,0 +1,18 @@
+name: Validate addon
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate manifest and build addon ZIP
+        shell: pwsh
+        run: ./scripts/package.ps1
