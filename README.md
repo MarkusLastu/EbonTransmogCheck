@@ -7,7 +7,7 @@ A World of Warcraft 3.3.5a addon for Ebonhold. It checks whether the appearance 
 ## Features
 
 - Shows an ownership marker on loot-roll item icons and adds collection status to the loot tooltip.
-- Hold Ctrl while hovering over a loot-roll item to preview it in the dressing room.
+- Hold Alt while hovering over a loot-roll item to preview it in the dressing room. Ctrl-click remains available for the normal dressing room.
 - Select English, French, German, Russian, or Spanish under **Interface > AddOns > EbonTransmogCheck**.
 - Change language with `/etmc lang en`, `/etmc lang fr`, `/etmc lang de`, `/etmc lang ru`, or `/etmc lang es`.
 

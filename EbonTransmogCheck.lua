@@ -78,6 +78,7 @@ end
 
 local refreshIndicators
 local updateLanguageButtons
+local previewDiagnostics = {}
 
 local function setLanguage(language, announce)
     if not languages[language] then return false end
@@ -96,6 +97,15 @@ SLASH_EBONTRANSMOGCHECK2 = "/etmc"
 SLASH_EBONTRANSMOGCHECK3 = "/transmogcheck"
 SlashCmdList.EBONTRANSMOGCHECK = function(message)
     local command, language = string.match((message or ""):lower(), "^(%S*)%s*(%S*)$")
+    if command == "debug" then
+        if #previewDiagnostics == 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("[ETMC] No hover preview recorded yet. Hold Alt over an item first.")
+        end
+        for _, diagnostic in ipairs(previewDiagnostics) do
+            DEFAULT_CHAT_FRAME:AddMessage("[ETMC] " .. diagnostic)
+        end
+        return
+    end
     if command ~= "lang" and command ~= "language" then
         DEFAULT_CHAT_FRAME:AddMessage("[Ebonhold] " .. getText("usage"))
         return
@@ -156,6 +166,27 @@ local collectionDataReady = false
 local previewActive = false
 local previewedItemLink
 local previewedTooltip
+local previewedOwner
+local previewMouseFrames = {}
+local previewDiagnosticPending = false
+local previewFrame = CreateFrame("Frame", "EbonTransmogCheckPreviewFrame")
+previewFrame:Hide()
+
+local function recordPreviewDiagnostics(tooltip, itemLink, phase)
+    if not DressUpModel then
+        previewDiagnostics[#previewDiagnostics + 1] = phase .. ": DressUpModel is missing"
+        return
+    end
+    local _, tooltipLink = tooltip:GetItem()
+    previewDiagnostics[#previewDiagnostics + 1] = phase .. ": link=" .. tostring(itemLink)
+        .. ", tooltipLink=" .. tostring(tooltipLink)
+        .. ", dressable=" .. tostring(IsDressableItem(itemLink))
+    previewDiagnostics[#previewDiagnostics + 1] = phase .. ": model=" .. tostring(DressUpModel:GetModel())
+        .. ", shown=" .. tostring(DressUpModel:IsShown())
+        .. ", visible=" .. tostring(DressUpModel:IsVisible())
+        .. ", size=" .. tostring(DressUpModel:GetWidth()) .. "x" .. tostring(DressUpModel:GetHeight())
+        .. ", alpha=" .. tostring(DressUpModel:GetAlpha())
+end
 
 local function getAppearanceOwned(itemID)
     local collections = _G.ezCollections
@@ -236,30 +267,72 @@ end
 
 local function closePreview()
     if previewActive and DressUpFrame then
-        DressUpFrame:Hide()
+        HideUIPanel(DressUpFrame)
     end
+    for frame in pairs(previewMouseFrames) do
+        frame:EnableMouse(true)
+    end
+    wipe(previewMouseFrames)
     previewActive = false
     previewedItemLink = nil
     previewedTooltip = nil
+    previewedOwner = nil
+    previewDiagnosticPending = false
+    previewFrame:Hide()
+end
+
+local function disablePreviewMouse(frame)
+    if frame:IsMouseEnabled() then
+        previewMouseFrames[frame] = true
+        frame:EnableMouse(false)
+    end
+    for _, child in ipairs({ frame:GetChildren() }) do
+        disablePreviewMouse(child)
+    end
 end
 
 local function updateHeldPreview(tooltip)
     local itemLink = tooltip.ebonTransmogItemLink
-    if not tooltip:IsShown() or not itemLink or not IsControlKeyDown()
+    if not tooltip:IsShown() or not itemLink or not IsAltKeyDown()
         or not DressUpItemLink or not DressUpFrame then
-        if previewedTooltip == tooltip then closePreview() end
+        if previewedTooltip == tooltip and not IsAltKeyDown() then closePreview() end
         return
     end
 
     if previewedItemLink ~= itemLink or previewedTooltip ~= tooltip then
+        local owner = tooltip:GetOwner()
+        if not previewActive then
+            disablePreviewMouse(DressUpFrame)
+            ShowUIPanel(DressUpFrame)
+            if DressUpModel then DressUpModel:SetUnit("player") end
+        end
         DressUpItemLink(itemLink)
         DressUpFrame:ClearAllPoints()
         DressUpFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         previewActive = true
         previewedItemLink = itemLink
         previewedTooltip = tooltip
+        previewedOwner = owner ~= UIParent and owner or nil
+        wipe(previewDiagnostics)
+        recordPreviewDiagnostics(tooltip, itemLink, "Opened")
+        previewDiagnosticPending = true
+        previewFrame:Show()
     end
 end
+
+previewFrame:SetScript("OnUpdate", function()
+    if not previewActive then return end
+    if not IsAltKeyDown()
+        or (previewedOwner and (not previewedOwner:IsVisible() or not MouseIsOver(previewedOwner)))
+        or (not previewedOwner and not previewedTooltip:IsShown()) then
+        closePreview()
+        return
+    end
+    if previewDiagnosticPending then
+        recordPreviewDiagnostics(previewedTooltip, previewedItemLink, "Next update")
+        previewDiagnosticPending = false
+    end
+end)
 
 local function updateTooltipItem(tooltip, itemLink)
     local itemID = itemLink and tonumber(string.match(itemLink, "item:(%d+)"))
@@ -284,7 +357,6 @@ local function hookTooltip(tooltip, readItems)
     tooltip:HookScript("OnHide", function(self)
         self.ebonTransmogItemLink = nil
         self.ebonTransmogStatusItemID = nil
-        if previewedTooltip == self then closePreview() end
     end)
     hooksecurefunc(tooltip, "ClearLines", function(self)
         self.ebonTransmogItemLink = nil
@@ -308,7 +380,7 @@ collectionFrame:SetScript("OnEvent", function(self, event)
 end)
 
 -- ============================================================
--- Tooltip status and Ctrl-held dressing-room preview.
+-- Tooltip status and Alt-held dressing-room preview.
 -- ============================================================
 hookTooltip(GameTooltip, false)
 hookTooltip(ItemRefTooltip, true)
@@ -338,10 +410,10 @@ tooltipHookFrame:SetScript("OnEvent", function()
 end)
 hookAtlasLootTooltips()
 
-local ctrlKeyFrame = CreateFrame("Frame")
-ctrlKeyFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
-ctrlKeyFrame:SetScript("OnEvent", function(_, _, key, state)
-    if (key == "LCTRL" or key == "RCTRL") and state == "0" then
+local altKeyFrame = CreateFrame("Frame")
+altKeyFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
+altKeyFrame:SetScript("OnEvent", function(_, _, key, state)
+    if (key == "LALT" or key == "RALT") and not IsAltKeyDown() then
         closePreview()
     end
 end)
