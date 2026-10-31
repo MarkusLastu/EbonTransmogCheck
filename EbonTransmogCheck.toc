@@ -3,6 +3,6 @@
 ## Title: EbonTransmogCheck
 ## Notes: Shows whether a loot-roll appearance is already collected
 ## Author: Markus L
-## Version: 1.0
+## Version: 1.1
 ## SavedVariables: EbonTransmogCheckDB, EbonholdTransmogCheckDB
 EbonTransmogCheck.lua
